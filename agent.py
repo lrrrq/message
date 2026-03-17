@@ -278,23 +278,135 @@ def fetch_lab_updates(history):
             logging.error(f"实验室 {lab['name']} 抓取失败: {e}")
     return new_items
 
-def fetch_visual_inspiration(history):
-    """抓取高审美视觉灵感 (Civitai/Behance 热门趋势)"""
-    logging.info("正在巡视高审美 AI 视觉流 (Civitai/Trends)...")
-    # Civitai 爬虫通常需要 API Key，这里使用其公开的 Model 列表页进行语义模拟抓取
-    url = "https://civitai.com/models" 
+def fetch_ai_commercial_news(history):
+    """抓取全球关于 AI 商业化与变现的顶级创投资讯 (TechCrunch 等)"""
+    logging.info("正在搜寻 AI 商业与变现风向标...")
+    url = 'https://techcrunch.com/category/artificial-intelligence/feed/'
     new_items = []
     try:
-        # 由于 Civitai 动态加载严重，此处作为占位，主要通过 AI 关键词扫描其他聚合源中的视觉话题
-        # 实际生产中可接入其 API 或爬取特定的视觉周刊
-        new_items.append({
-            "title": "🎨 视觉审美洞察：当前最火的灯光/构图渲染风格",
-            "desc": "基于全网视觉模型变动趋势的审美趋势预测",
-            "url": "https://civitai.com/models",
-            "stars": "Top 1%"
-        })
-    except: pass
+        import xml.etree.ElementTree as ET
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        root = ET.fromstring(res.text)
+        count = 0
+        for item in root.findall('./channel/item'):
+            title = item.find('title').text
+            link = item.find('link').text
+            if link in history:
+                continue
+            new_items.append({
+                "title": f"💰 [商业破局] {title}",
+                "desc": "最具变现潜力的硅谷 AI 商业动作与创投情报",
+                "url": link,
+                "stars": "Business"
+            })
+            history.add(link)
+            count += 1
+            if count >= 2: break # 取前两条
+    except Exception as e:
+        logging.error(f"商业风向抓取失败: {e}")
     return new_items
+
+def fetch_visual_inspiration(history):
+    """抓取高审美视觉灵感 (Civitai 真实最高赞图片)"""
+    logging.info("正在提取高质量视觉模型参考图...")
+    url = 'https://civitai.com/api/v1/images?limit=3&sort=Most%20Reactions&period=Day&nsfw=None'
+    text_items = []
+    visual_articles = []
+    try:
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15).json()
+        items = res.get('items', [])
+        for i, item in enumerate(items):
+            img_url = item.get('url')
+            if not img_url or img_url in history:
+                continue
+            
+            post_url = img_url # 【免登录优化】直接链接到无墙高清水印原图，不跳回强制登录的主页
+            author = item.get('username', '匿名大神')
+            prompt_data = item.get('meta', {}).get('prompt', '（艺术家未公开提示词，纯享视觉震撼）') if isinstance(item.get('meta'), dict) else '（提示词未公开）'
+            
+            # 给 LLM 用来在早报里排版的素材
+            text_items.append({
+                "title": f"🎨 视觉巅峰Top{i+1}: 创作者 {author}",
+                "desc": f"Civitai顶级渲染原作。灵感提示：{prompt_data[:150]}...",
+                "url": post_url,
+                "stars": "Top 1% Aesthetic"
+            })
+            
+            # 真实画报大图 (用于独立 News 推广)
+            visual_articles.append({
+                "title": f"🎨 视觉巅峰Top{i+1} | 作者: {author}",
+                "description": "来源: Civitai | 点击欣赏完整画质",
+                "url": post_url,
+                "picurl": img_url
+            })
+            history.add(img_url)
+    except Exception as e:
+        logging.error(f"Civitai 视觉获取失败: {e}")
+
+    # 补充高质量画源：DeviantArt 专属 AI 艺术热门板块
+    try:
+        import xml.etree.ElementTree as ET
+        da_url = 'https://backend.deviantart.com/rss.xml?q=special:popular+ai_art'
+        da_res = requests.get(da_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
+        root = ET.fromstring(da_res.text)
+        
+        count = 0
+        for item in root.findall('./channel/item'):
+            title = item.find('title').text
+            link = item.find('link').text
+            media = item.find('{http://search.yahoo.com/mrss/}content')
+            img_url = media.get('url') if media is not None else ''
+            
+            if not img_url or img_url in history:
+                continue
+                
+            post_url = img_url # 【免登录优化】同样直接跳原图
+                
+            text_items.append({
+                "title": f"🖌️ 艺术潮流: {title}",
+                "desc": "DeviantArt 全球顶级艺术家生成范式参考",
+                "url": post_url,
+                "stars": "Trending Art"
+            })
+            
+            visual_articles.append({
+                "title": f"🖌️ 行家原作 | {title[:20]}",
+                "description": "来源: DeviantArt | 前沿流派范式",
+                "url": post_url,
+                "picurl": img_url
+            })
+            history.add(img_url)
+            count += 1
+            if count >= 2: break
+    except Exception as e:
+        logging.error(f"DeviantArt 视觉获取失败: {e}")
+        
+    return text_items, visual_articles
+
+def fetch_global_aesthetic(history):
+    """从 Bing 等源抓取全球顶尖摄影艺术（非 AI 限定）"""
+    logging.info("正在搜索全球前沿审美画作 (Bing Daily/Editorial)...")
+    url = 'https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=3&mkt=en-US'
+    items = []
+    try:
+        res = requests.get(url, timeout=10).json()
+        for img in res.get('images', []):
+            img_url = 'https://www.bing.com' + img['url']
+            if img_url in history: continue
+            
+            items.append({
+                "title": f"🖼️ 全球审美动态: {img['copyright'][:50]}",
+                "desc": "基于自然、地理与人文的顶级构图与光影参考",
+                "url": img_url,
+                "stars": "Aesthetic",
+                "picurl": img_url # 用于直发
+            })
+            # 记录到历史由主流程处理
+    except Exception as e:
+        logging.error(f"全球审美抓取失败: {e}")
+    return items
+
+
 
 # ==========================================
 # 3. AI 处理模块 (三路回退机制策略)
@@ -369,7 +481,7 @@ class AIFallbackProcessor:
         logging.error("所有 AI 提供商全军覆没！降级使用原文。")
         return None
 
-def refine_content_with_gemini(raw_items):
+def refine_content_with_gemini(raw_items, visual_news_articles=None):
     """调用 AI 对提取内容进行深加工：支持行业穿透、早晚报人格热切换、高审美排版"""
     if not raw_items:
         return ""
@@ -392,11 +504,11 @@ def refine_content_with_gemini(raw_items):
         style_instruction = """
         【人格设定：顶级商业分析师】
         当前是 09:30 早报时间，你的任务是：极致精简与分类。
-        1. 你必须将所有提供的情报严格按照以下板块分类输出，不得遗漏【实验室一手】与【高审美视觉】内容：
-           🔹 [开源与项目] 
-           🔹 [行业与论文]
-           🔹 [大厂与实验室]
-           🎨 [高审美与视觉体验]
+        1. 你必须将所有提供的情报严格按照以下板块分类输出，不得遗漏任何一块：
+           🔹 [行业风向与 AI 商业化]（重点提炼硅谷投资与变现破局）
+           🔹 [开源与极客项目] 
+           🔹 [大厂巨头与实验室动态]
+           🎨 [高审美与视觉艺术体验]
         2. 风格：专业、冷静、干货。严禁废话，重点突出“商业变现”或“降本增效”。
         """
     else:
@@ -404,11 +516,11 @@ def refine_content_with_gemini(raw_items):
         style_instruction = """
         【人格设定：幽默极客脱口秀专家】
         当前是晚间时间，你的任务是：深度、犀利分类播报。
-        1. 你必须将所有提供的情报严格分类输出，不得遗漏【实验室一手】和【高审美视觉内容】：
-           🔹 [开源与极客代码]
-           🔹 [行业吃瓜与论文]
-           🔹 [实验室巨头动向]
-           🎨 [高审美与视觉前沿]
+        1. 你必须将所有提供的情报严格分类输出，不得遗漏任何一块：
+           🔹 [铜臭味与搞钱思路]（重点关注那些拿了融资或者想通过AI变现的新闻）
+           🔹 [硬核开源代码库]
+           🔹 [实验室疯狂科学家们]
+           🎨 [惊掉下巴的高级视觉审美]
         2. 风格：口语化、辛辣点评。针对高审美内容，展现你顶级的艺术细胞。
         """
 
@@ -417,14 +529,15 @@ def refine_content_with_gemini(raw_items):
     
     {style_instruction}
 
-    【通用排版审美要求】
-    - 使用丰富的 Emoji 增加视觉层次感，不用任何 Markdown 语法（如加粗 ** 或链接 []() 语法）。
-    - 结构必须分大板块输出（不同类型的情报放在对应的板块下），绝对不能只混在一起。
-    - 单个项目的输出格式必须为：
+    【通用排版审美要求 (Text 纯文字直给)】
+    - 使用丰富的 Emoji 增加视觉层次感。不要使用 Markdown 语法（如 #, **, []() 等），因为有些客户端无法完美渲染。
+    - 结构必须分大板块输出（不同类型的情报放在对应的板块下）。
+    - 单个项目的输出格式建议如下：
       💡 项目：项目标题 (🔥热度)
       🔗 链接：http://...
       💬 简评：...
       ⭐ 评分：X/10
+    - 请用行云流水的方式串写，让阅读有连贯体验。
     - 结尾必须单独成段落：【🧘‍♂️ AI 禅意时刻】，提炼今日价值，带点哲理。
 
     【以下是待处理原始数据】：
@@ -437,14 +550,14 @@ def refine_content_with_gemini(raw_items):
     if refined_text:
         return refined_text
     else:
-        return "大模型脑子里进水了，处理失败，直接扔原始数据给你：\n" + raw_text
+        return "数据清洗失败，直接展示原始数据：\n" + raw_text
 
 # ==========================================
 # 4. 微信推送模块 (支持企微群机器人 Webhook)
 # ==========================================
 def send_wechat_notification(content):
-    """将结果通过 Webhook 推送到企业微信群"""
-    logging.info("正在执行群 Webhook 推送...")
+    """将结果通过 Webhook 推送到企业微信群 (Text 格式，确保兼容性)"""
+    logging.info("正在执行群 Webhook 推送 (Text)...")
     if not WECHAT_WEBHOOK_URL or WECHAT_WEBHOOK_URL == "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=your_webhook_key_here":
         logging.warning("未配置有效的企业微信 Webhook URL，改为打印到日志。")
         logging.info(f"\n推文内容:\n{'-'*40}\n{content}\n{'-'*40}")
@@ -453,13 +566,13 @@ def send_wechat_notification(content):
     payload = {
         "msgtype": "text",
         "text": {
-            "content": f"👾 AI 极客动态\n================\n\n{content}\n\n================\n*By Antigravity Agent*"
+            "content": f"👾 AI 极客动态\n================\n{content}\n\n================\n*By Antigravity Agent*"
         }
     }
     try:
         response = requests.post(WECHAT_WEBHOOK_URL, json=payload, headers={"Content-Type": "application/json"})
         if response.status_code == 200:
-            logging.info("微信群 Webhook 推送成功！")
+            logging.info("微信群 Webhook (Text) 推送成功！")
             return True
         else:
             logging.error(f"微信群推送失败: {response.text}")
@@ -467,6 +580,56 @@ def send_wechat_notification(content):
     except Exception as e:
         logging.error(f"微信请求异常: {e}")
         return False
+
+def send_wechat_news(articles):
+    """发送【图文并茂】卡片（用于次要信息聚合）"""
+    if not articles:
+        return False
+    logging.info("正在推送图文卡片画报...")
+    payload = {"msgtype": "news", "news": {"articles": articles}}
+    try:
+        response = requests.post(WECHAT_WEBHOOK_URL, json=payload, headers={"Content-Type": "application/json"})
+        return response.status_code == 200
+    except:
+        return False
+
+def send_wechat_raw_image(img_url):
+    """【黑科技】通过 Base64 将图片作为原生消息直接发送到对话框，实现 1:1 直显"""
+    if not WECHAT_WEBHOOK_URL: return False
+    logging.info(f"正在直接投送高清原图: {img_url[:50]}...")
+    try:
+        import base64
+        import hashlib
+        # 1. 下载图片
+        resp = requests.get(img_url, timeout=20)
+        if resp.status_code != 200: return False
+        img_data = resp.content
+        
+        # 2. 计算 MD5
+        md5_obj = hashlib.md5()
+        md5_obj.update(img_data)
+        md5_hex = md5_obj.hexdigest()
+        
+        # 3. Base64 编码
+        b64_data = base64.b64encode(img_data).decode('utf-8')
+        
+        # 4. 发送
+        payload = {
+            "msgtype": "image",
+            "image": {
+                "base64": b64_data,
+                "md5": md5_hex
+            }
+        }
+        res = requests.post(WECHAT_WEBHOOK_URL, json=payload, headers={"Content-Type": "application/json"})
+        if res.status_code == 200:
+            logging.info("原生图片推送成功！")
+            return True
+        else:
+            logging.error(f"图片推送失败: {res.text}")
+    except Exception as e:
+        logging.error(f"图片处理异常: {e}")
+    return False
 
 # ==========================================
 # 5. 主流程控制
@@ -481,23 +644,45 @@ def job():
     hn_items = fetch_hackernews_ai(history)
     hf_papers = fetch_huggingface_papers(history)
     aggregator_items = fetch_web_aggregators(history)
-    lab_items = fetch_lab_updates(history)            # 新增：实验室一手动态
-    visual_items = fetch_visual_inspiration(history)  # 新增：高审美视觉流
+    lab_items = fetch_lab_updates(history)            
+    commercial_items = fetch_ai_commercial_news(history) 
+    visual_text_items, visual_news_articles = fetch_visual_inspiration(history)  
+    global_aesthetic_items = fetch_global_aesthetic(history) # 新增：全球主流审美源
     
-    all_raw_items = github_items + hn_items + hf_papers + aggregator_items + lab_items + visual_items
-    
-    if not all_raw_items:
-        logging.info("各大平台风平浪静，无新增或符合条件的数据，跳过本次推送。")
+    # 汇总待发送文本的数据
+    all_raw_items = github_items + hn_items + hf_papers + aggregator_items + lab_items + commercial_items + visual_text_items
+    for g in global_aesthetic_items:
+        all_raw_items.append(g)
+
+    if not all_raw_items and not visual_news_articles and not global_aesthetic_items:
+        logging.info("各大平台风平浪静，无新增数据。")
         return
         
-    refined_report = refine_content_with_gemini(all_raw_items)
+    # 1. 发送文字主简报 (确保信息可达)
+    text_success = False
+    if all_raw_items:
+        refined_report = refine_content_with_gemini(all_raw_items)
+        text_success = send_wechat_notification(refined_report)
+        
+    # 2. 视觉震撼：原生大图 1:1 直发（挑选最顶级的 2-3 张发原图）
+    # 优先级：全球摄影 > AI 高赞
+    raw_images_to_send = []
+    for g in global_aesthetic_items: raw_images_to_send.append(g['picurl'])
+    for v in visual_news_articles:
+        if v.get('picurl'): raw_images_to_send.append(v['picurl'])
     
-    success = send_wechat_notification(refined_report)
+    img_count = 0
+    for img_url in raw_images_to_send:
+        if img_count >= 3: break # 每天最多轰炸 3 张顶级美图防止刷屏
+        if send_wechat_raw_image(img_url):
+            img_count += 1
+            history.add(img_url) # 发送过原图的也计入去重
+            time.sleep(1) # 稍微停顿，防止乱序
+        
+    if text_success or img_count > 0:
+        save_history(history) 
     
-    if success:
-        save_history(history) # 推送成功才更新历史记录，避免漏推
-    
-    logging.info("🏁 本轮任务执行完毕。")
+    logging.info(f"🏁 本轮任务执行完毕。推送了 {img_count} 张视觉炸弹。")
 
 if __name__ == "__main__":
     job()
