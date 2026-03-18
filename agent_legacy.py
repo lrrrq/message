@@ -586,54 +586,15 @@ class AgenticCurator:
             return items[:top_n] # 降级：返回前 N 条
 
 def refine_content_with_gemini(raw_items):
-    """最终合成：注入 internal-comms 的专业叙事风格"""
+    """最终合成：注入专业叙事风格，并根据时间自动切换人格"""
     if not raw_items: return ""
     
-    # 按照板块分类组织数据
-    formatted_items = ""
-    for item in raw_items:
-        score_tag = f" (💎AI评级: {item.get('ai_score', 'N/A')}/40)"
-        formatted_items += f"【{item['title']}】{score_tag}\n- 链接: {item['url']}\n- 深度点评: {item.get('ai_reason', '暂无')}\n\n"
-
-    prompt = f"""
-    你是 AI 趋势观察者 的主编。请基于以下筛选出的“高信噪比”信号，撰写一份极具质感的推送简报。
-    
-    【写作风格指南 (internal-comms)】:
-    - 语气：专业、克制、富有洞察力。
-    - 视角：以“我们” (Team / Agent) 的视角进行播报。
-    - 结构：
-        1. 🚀 [前沿雷达] - 覆盖技术突破与开源硬核。
-        2. 💰 [金钱永不眠] - 覆盖商业变现与投融资动态。
-        3. 🎨 [视觉实验室] - 覆盖顶级审美、先锋设计与多模态生成。
-        4. 🧘‍♂️ [AI 禅意时刻] - 一句总结今日价值。
-        
-    - 注意：使用 Emoji 增加呼吸感，但严禁使用 Markdown 链接格式。
-    
-    【今日高价值信号】:
-    {formatted_items}
-    """
-    
-    processor = AIFallbackProcessor()
-    refined_text = processor.process(prompt)
-    
-    if refined_text:
-        return refined_text
-    else:
-        logging.warning("AI 最终合成失败，使用原始数据兜底。")
-        # 兜底：简单拼接
-        fallback_text = "AI 简报合成出现波动，以下为今日精选：\n\n"
-        for it in raw_items:
-            fallback_text += f"📍 {it['title']}\n🔗 {it['url']}\n\n"
-        return fallback_text
-      
-    # 执行行业关键词加权与标星
+    # 汇总待处理数据
     processed_text_list = []
     for item in raw_items:
-        is_priority = any(kw.lower() in item['title'].lower() or kw.lower() in item['desc'].lower() for kw in FOCUS_KEYWORDS)
-        prefix = "🌟【重点关注】" if is_priority else ""
-        pub_info = f"\n⏰ 发布时间: {item.get('pub_time', '实时')}"
-        processed_text_list.append(f"{prefix}标题: {item['title']}\n描述: {item['desc']}\n热度: {item['stars']}{pub_info}\n链接: {item['url']}")
-        
+        score_tag = f" (💎AI评级: {item.get('ai_score', 'N/A')}/40)"
+        processed_text_list.append(f"【{item['title']}】{score_tag}\n- 链接: {item['url']}\n- 深度点评: {item.get('ai_reason', '暂无')}")
+    
     raw_text = "\n\n".join(processed_text_list)
     
     # 判定当前人格：06:00 - 11:59 为早报（决策者简报），其余为晚报（极客脱口秀）
@@ -643,24 +604,22 @@ def refine_content_with_gemini(raw_items):
     if is_morning:
         persona_name = "决策者简报模式 (早报)"
         style_instruction = """
-        【人格设定：顶级商业分析师】
-        当前是 09:30 早报时间，你的任务是：极致精简与分类。
-        1. 你必须将所有提供的情报严格按照以下板块分类输出，不得遗漏任何一块：
-           🔹 [行业风向与 AI 商业化]（重点提炼硅谷投资与变现破局）
-           🔹 [开源与极客项目] 
-           🔹 [大厂巨头与实验室动态]
-           🎨 [高审美与视觉艺术体验]
-        2. 风格：专业、冷静、干货。严禁废话，重点突出“商业变现”或“降本增效”。
+        【人格设定：顶级商业分析师 (internal-comms 风格)】
+        当前是早报时间，你的任务是：极致精简与分类。
+        1. 严格按照以下板块分类输出：
+           🚀 [前沿雷达] (技术突破与开源硬核)
+           💰 [金钱永不眠] (商业变现与投融资动态)
+           🎨 [视觉实验室] (多模态生成与审美范式)
+        2. 风格：专业、冷静、干货。重点突出“商业变现”或“降本增效”。
         """
     else:
         persona_name = "极客脱口秀模式 (晚报/手动)"
         style_instruction = """
         【人格设定：幽默极客脱口秀专家】
-        当前是晚间时间，你的任务是：深度、犀利分类播报。
-        1. 你必须将所有提供的情报严格分类输出，不得遗漏任何一块：
-           🔹 [铜臭味与搞钱思路]（重点关注那些拿了融资或者想通过AI变现的新闻）
-           🔹 [硬核开源代码库]
-           🔹 [实验室疯狂科学家们]
+        当前是晚间时间，你的任务是：深度、犀利、带点“喷子”精神的分类播报。
+        1. 严格按照以下板块分类输出：
+           🔹 [硬核黑料与技术真相]
+           🔹 [铜臭味与搞钱思路]
            🎨 [惊掉下巴的高级视觉审美]
         2. 风格：口语化、辛辣点评。针对高审美内容，展现你顶级的艺术细胞。
         """
@@ -670,29 +629,28 @@ def refine_content_with_gemini(raw_items):
     
     {style_instruction}
 
-    【通用排版审美要求 (Text 纯文字直给)】
-    - 使用丰富的 Emoji 增加视觉层次感。不要使用 Markdown 语法（如 #, **, []() 等），因为有些客户端无法完美渲染。
-    - 结构必须分大板块输出（不同类型的情报放在对应的板块下）。
-    - 单个项目的输出格式必须包含发布时间，建议如下：
-      💡 项目：项目标题 (🔥热度)
-      ⏰ 时间：原数据中的发布时间
-      🔗 链接：http://...
-      💬 简评：...
-      ⭐ 评分：X/10
-    - 请用行云流水的方式串写，让阅读有连贯体验。
+    【通用排版审美要求】
+    - 使用 Emoji 增加视觉层次感。禁止使用 Markdown 链接格式（如 [title](url)），直接展示 URL。
+    - 严禁使用 Markdown 代码块包裹正文。
+    - 每个板块必须包含 1-2 条精选内容。
     - 结尾必须单独成段落：【🧘‍♂️ AI 禅意时刻】，提炼今日价值，带点哲理。
 
-    【以下是待处理原始数据】：
+    【今日高价值信号数据】：
     {raw_text}
     """
     
     processor = AIFallbackProcessor()
-    refined_text = processor.process(prompt, raw_text)
+    refined_text = processor.process(prompt)
     
     if refined_text:
         return refined_text
     else:
-        return "数据清洗失败，直接展示原始数据：\n" + raw_text
+        logging.warning("AI 最终合成失败，使用原始数据兜底。")
+        fallback_text = f"👾 AI 简报合成出现波动，以下为今日精选 ({persona_name})：\n\n"
+        for it in raw_items:
+            fallback_text += f"📍 {it['title']}\n🔗 {it['url']}\n\n"
+        return fallback_text
+
 
 # ==========================================
 # 4. 微信推送模块 (支持企微群机器人 Webhook)
