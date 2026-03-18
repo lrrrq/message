@@ -546,7 +546,7 @@ class AgenticCurator:
         3. 🎨 审美高度 (Aesthetic): 是否符合先锋审美？(Brutalism, Minimalism, Glassmorphism)?
         4. 🌊 稀缺度 (Rarity): 是否是一手独家？
         
-        要求：返回严谨的 JSON 数组，格式为: [{"id": 0, "score": 15.5, "reason": "..."}]
+        要求：返回严谨的 JSON 数组，格式为: [{{"id": 0, "score": 15.5, "reason": "..."}}]
         score = 以上四项加和。
         
         【待评分列表】:
