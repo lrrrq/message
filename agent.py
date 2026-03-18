@@ -383,27 +383,51 @@ def fetch_visual_inspiration(history):
         
     return text_items, visual_articles
 
-def fetch_global_aesthetic(history):
-    """从 Bing 等源抓取全球顶尖摄影艺术（非 AI 限定）"""
-    logging.info("正在搜索全球前沿审美画作 (Bing Daily/Editorial)...")
-    url = 'https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=3&mkt=en-US'
+def fetch_avant_garde_art(history):
+    """从全球顶尖艺术/设计平台 (Colossal, Designboom) 抓取前卫审美源"""
+    logging.info("正在搜索全球前卫艺术与先锋设计 (Colossal/Designboom)...")
+    sources = [
+        "https://www.thisiscolossal.com/feed/",
+        "https://www.designboom.com/feed/"
+    ]
     items = []
-    try:
-        res = requests.get(url, timeout=10).json()
-        for img in res.get('images', []):
-            img_url = 'https://www.bing.com' + img['url']
-            if img_url in history: continue
+    import re
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    for url in sources:
+        try:
+            res = requests.get(url, headers=headers, timeout=15)
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(res.text)
             
-            items.append({
-                "title": f"🖼️ 全球审美动态: {img['copyright'][:50]}",
-                "desc": "基于自然、地理与人文的顶级构图与光影参考",
-                "url": img_url,
-                "stars": "Aesthetic",
-                "picurl": img_url # 用于直发
-            })
-            # 记录到历史由主流程处理
-    except Exception as e:
-        logging.error(f"全球审美抓取失败: {e}")
+            for item in root.findall('./channel/item')[:5]:
+                title = item.find('title').text
+                link = item.find('link').text
+                # 提取描述和图片
+                content = item.find('{http://purl.org/rss/1.0/modules/content/}encoded')
+                content_text = content.text if content is not None else ''
+                
+                # 正则提取第一张高质量大图
+                img_urls = re.findall(r'src="([^"]+)"', content_text)
+                target_img = ""
+                for img in img_urls:
+                    if any(ext in img.lower() for ext in ['.jpg', '.png', '.webp']) and 'avatar' not in img:
+                        target_img = img
+                        break
+                
+                if not target_img or target_img in history:
+                    continue
+                    
+                items.append({
+                    "title": f"🖼️ 前卫艺术: {title[:50]}...",
+                    "desc": "来自全球顶级当代艺术平台的审美范式参考",
+                    "url": link,
+                    "stars": "Avant-Garde",
+                    "picurl": target_img
+                })
+        except Exception as e:
+            logging.error(f"前卫艺术平台抓取失败 ({url}): {e}")
+            
     return items
 
 
@@ -647,14 +671,14 @@ def job():
     lab_items = fetch_lab_updates(history)            
     commercial_items = fetch_ai_commercial_news(history) 
     visual_text_items, visual_news_articles = fetch_visual_inspiration(history)  
-    global_aesthetic_items = fetch_global_aesthetic(history) # 新增：全球主流审美源
+    avant_garde_items = fetch_avant_garde_art(history) # 新增：全球顶级艺术源
     
     # 汇总待发送文本的数据
     all_raw_items = github_items + hn_items + hf_papers + aggregator_items + lab_items + commercial_items + visual_text_items
-    for g in global_aesthetic_items:
+    for g in avant_garde_items:
         all_raw_items.append(g)
 
-    if not all_raw_items and not visual_news_articles and not global_aesthetic_items:
+    if not all_raw_items and not visual_news_articles and not avant_garde_items:
         logging.info("各大平台风平浪静，无新增数据。")
         return
         
@@ -664,25 +688,25 @@ def job():
         refined_report = refine_content_with_gemini(all_raw_items)
         text_success = send_wechat_notification(refined_report)
         
-    # 2. 视觉震撼：原生大图 1:1 直发（挑选最顶级的 2-3 张发原图）
-    # 优先级：全球摄影 > AI 高赞
+    # 2. 视觉震撼：原生大图 1:1 直发（挑选最顶级的先锋艺术）
+    # 优先级：前卫艺术 > AI 视觉
     raw_images_to_send = []
-    for g in global_aesthetic_items: raw_images_to_send.append(g['picurl'])
+    for g in avant_garde_items: raw_images_to_send.append(g['picurl'])
     for v in visual_news_articles:
         if v.get('picurl'): raw_images_to_send.append(v['picurl'])
     
     img_count = 0
     for img_url in raw_images_to_send:
-        if img_count >= 3: break # 每天最多轰炸 3 张顶级美图防止刷屏
+        if img_count >= 3: break # 每天最多 3 张防止刷屏
         if send_wechat_raw_image(img_url):
             img_count += 1
-            history.add(img_url) # 发送过原图的也计入去重
-            time.sleep(1) # 稍微停顿，防止乱序
+            history.add(img_url) 
+            time.sleep(1) 
         
     if text_success or img_count > 0:
         save_history(history) 
     
-    logging.info(f"🏁 本轮任务执行完毕。推送了 {img_count} 张视觉炸弹。")
+    logging.info(f"🏁 本轮任务执行完毕。推送了 {img_count} 张先锋视觉炸弹。")
 
 if __name__ == "__main__":
     job()
