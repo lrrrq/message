@@ -33,31 +33,36 @@ class AIFallbackProcessor:
                 logging.error(f"Gemini 初始化失败: {e}")
                 
     def _call_deepseek(self, prompt):
-        # 显式初始化 client，避免某些环境下 proxies 参数冲突
-        client = OpenAI(
-            api_key=DEEPSEEK_API_KEY, 
-            base_url="https://api.deepseek.com",
-            http_client=None # 强制不让它自动寻找系统的代理配置
-        )
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3
-        )
-        return response.choices[0].message.content
+        import requests
+        url = "https://api.deepseek.com/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+        }
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3
+        }
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        return response.json()['choices'][0]['message']['content']
         
     def _call_groq(self, prompt):
-        client = OpenAI(
-            api_key=GROQ_API_KEY, 
-            base_url="https://api.groq.com/openai/v1",
-            http_client=None
-        )
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3
-        )
-        return response.choices[0].message.content
+        import requests
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {GROQ_API_KEY}"
+        }
+        payload = {
+            "model": "llama-3.1-70b-versatile",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3
+        }
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        return response.json()['choices'][0]['message']['content']
         
     def _call_gemini(self, prompt):
         model = genai.GenerativeModel('gemini-1.5-flash')
