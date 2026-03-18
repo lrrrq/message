@@ -552,10 +552,19 @@ class AgenticCurator:
         
         try:
             res = self.processor.process(scoring_prompt)
+            if not res:
+                logging.warning("AI 策展人未返回评分结果，使用默认排序。")
+                return items[:top_n]
+                
             # 简单清理可能的 Markdown 标记
             json_str = res.strip().replace('```json', '').replace('```', '')
             import json as json_lib
             scores = json_lib.loads(json_str)
+            
+            # 兼容性检查：如果返回的不是列表
+            if not isinstance(scores, list):
+                logging.warning("AI 返回评分格式异常。")
+                return items[:top_n]
             
             # 映射评分回到原始 items
             for s in scores:
@@ -603,7 +612,16 @@ def refine_content_with_gemini(raw_items):
     
     processor = AIFallbackProcessor()
     refined_text = processor.process(prompt)
-    return refined_text if refined_text else "简报生成失败，请检查 AI 提供商。"
+    
+    if refined_text:
+        return refined_text
+    else:
+        logging.warning("AI 最终合成失败，使用原始数据兜底。")
+        # 兜底：简单拼接
+        fallback_text = "AI 简报合成出现波动，以下为今日精选：\n\n"
+        for it in raw_items:
+            fallback_text += f"📍 {it['title']}\n🔗 {it['url']}\n\n"
+        return fallback_text
       
     # 执行行业关键词加权与标星
     processed_text_list = []
