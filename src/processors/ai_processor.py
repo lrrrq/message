@@ -33,7 +33,12 @@ class AIFallbackProcessor:
                 logging.error(f"Gemini 初始化失败: {e}")
                 
     def _call_deepseek(self, prompt):
-        client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+        # 显式初始化 client，避免某些环境下 proxies 参数冲突
+        client = OpenAI(
+            api_key=DEEPSEEK_API_KEY, 
+            base_url="https://api.deepseek.com",
+            http_client=None # 强制不让它自动寻找系统的代理配置
+        )
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
@@ -42,7 +47,11 @@ class AIFallbackProcessor:
         return response.choices[0].message.content
         
     def _call_groq(self, prompt):
-        client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+        client = OpenAI(
+            api_key=GROQ_API_KEY, 
+            base_url="https://api.groq.com/openai/v1",
+            http_client=None
+        )
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],

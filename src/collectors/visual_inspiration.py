@@ -31,7 +31,8 @@ class VisualInspirationCollector(BaseCollector):
         try:
             da_url = 'https://backend.deviantart.com/rss.xml?q=special:popular+ai_art'
             da_res = requests.get(da_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
-            root = ET.fromstring(da_res.text)
+            # 使用 content 避免编码问题引起的 mismatched tag 错误
+            root = ET.fromstring(da_res.content)
             count = 0
             for item in root.findall('./channel/item'):
                 title = item.find('title').text

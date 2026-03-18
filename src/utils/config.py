@@ -8,13 +8,13 @@ load_dotenv()
 # 项目根目录
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# API Keys
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# API Keys (使用 .strip() 防止 GitHub Secrets 带有不可见换行符或多余引号)
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip().strip('"').strip("'")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
 
 # WeChat
-WECHAT_WEBHOOK_URL = os.getenv("WECHAT_WEBHOOK_URL")
+WECHAT_WEBHOOK_URL = os.getenv("WECHAT_WEBHOOK_URL", "").strip().strip('"').strip("'")
 
 # WeChat
 WECHAT_WEBHOOK_URL = os.getenv("WECHAT_WEBHOOK_URL")
