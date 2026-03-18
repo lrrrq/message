@@ -106,7 +106,8 @@ def fetch_github_trending(history):
                     "title": title,
                     "desc": desc,
                     "url": repo_url,
-                    "stars": stars
+                    "stars": stars,
+                    "pub_time": datetime.datetime.now().strftime("%Y-%m-%d") # Trending daily
                 })
                 # 记录到历史中（在推送成功后保存）
                 history.add(repo_url)
@@ -147,7 +148,8 @@ def fetch_hackernews_ai(history):
                 "title": title,
                 "desc": f"HackerNews 热门讨论，热度分数: {points}",
                 "url": url_link,
-                "stars": str(points)
+                "stars": str(points),
+                "pub_time": hit.get("created_at", "").split("T")[0] # 提取 YYYY-MM-DD
             })
             history.add(url_link)
             
@@ -186,7 +188,8 @@ def fetch_huggingface_papers(history):
                     "title": f"📄 论文: {title}",
                     "desc": "Hugging Face 今日推荐学术论文",
                     "url": paper_url,
-                    "stars": "HF Recommend"
+                    "stars": "HF Recommend",
+                    "pub_time": datetime.datetime.now().strftime("%Y-%m-%d")
                 })
                 history.add(paper_url)
                 
@@ -293,11 +296,13 @@ def fetch_ai_commercial_news(history):
             link = item.find('link').text
             if link in history:
                 continue
+            pub_date = item.find('pubDate').text if item.find('pubDate') is not None else ""
             new_items.append({
                 "title": f"💰 [商业破局] {title}",
                 "desc": "最具变现潜力的硅谷 AI 商业动作与创投情报",
                 "url": link,
-                "stars": "Business"
+                "stars": "Business",
+                "pub_time": pub_date
             })
             history.add(link)
             count += 1
@@ -317,6 +322,7 @@ def fetch_visual_inspiration(history):
         items = res.get('items', [])
         for i, item in enumerate(items):
             img_url = item.get('url')
+            created_at = item.get('createdAt', '')[:10] if item.get('createdAt') else ""
             if not img_url or img_url in history:
                 continue
             
@@ -329,7 +335,8 @@ def fetch_visual_inspiration(history):
                 "title": f"🎨 视觉巅峰Top{i+1}: 创作者 {author}",
                 "desc": f"Civitai顶级渲染原作。灵感提示：{prompt_data[:150]}...",
                 "url": post_url,
-                "stars": "Top 1% Aesthetic"
+                "stars": "Top 1% Aesthetic",
+                "pub_time": created_at
             })
             
             # 真实画报大图 (用于独立 News 推广)
@@ -418,12 +425,14 @@ def fetch_avant_garde_art(history):
                 if not target_img or target_img in history:
                     continue
                     
+                pub_date = item.find('pubDate').text if item.find('pubDate') is not None else ""
                 items.append({
                     "title": f"🖼️ 前卫艺术: {title[:50]}...",
                     "desc": "来自全球顶级当代艺术平台的审美范式参考",
                     "url": link,
                     "stars": "Avant-Garde",
-                    "picurl": target_img
+                    "picurl": target_img,
+                    "pub_time": pub_date
                 })
         except Exception as e:
             logging.error(f"前卫艺术平台抓取失败 ({url}): {e}")
@@ -439,27 +448,30 @@ class AIFallbackProcessor:
     def __init__(self):
         self.providers = []
         
-        # 1. 优先级最高：DeepSeek (最稳定/性价比极高，且不用管网络)
-        if DEEPSEEK_API_KEY and DEEPSEEK_API_KEY != "your_deepseek_api_key_here":
+        # 1. 优先级最高：DeepSeek
+        if DEEPSEEK_API_KEY:
             self.providers.append({
                 "name": "DeepSeek",
                 "func": self._call_deepseek
             })
             
-        # 2. 优先级第二：Groq (Llama 3, 极速响应)
-        if GROQ_API_KEY and GROQ_API_KEY != "your_groq_api_key_here":
+        # 2. 优先级第二：Groq
+        if GROQ_API_KEY:
             self.providers.append({
                 "name": "Groq",
                 "func": self._call_groq
             })
             
-        # 3. 优先级兜底：Gemini (免费但有网络限制诉求)
-        if GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here":
-            genai.configure(api_key=GEMINI_API_KEY)
-            self.providers.append({
-                "name": "Gemini",
-                "func": self._call_gemini
-            })
+        # 3. 优先级兜底：Gemini
+        if GEMINI_API_KEY:
+            # 兼容旧版本调用
+            try:
+                genai.configure(api_key=GEMINI_API_KEY)
+                self.providers.append({
+                    "name": "Gemini",
+                    "func": self._call_gemini
+                })
+            except: pass
             
     def _call_deepseek(self, prompt):
         client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
@@ -473,7 +485,7 @@ class AIFallbackProcessor:
     def _call_groq(self, prompt):
         client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant", # 快速轻量模型
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3
         )
@@ -484,9 +496,9 @@ class AIFallbackProcessor:
         response = model.generate_content(prompt)
         return response.text
 
-    def process(self, prompt, raw_text):
+    def process(self, prompt):
         if not self.providers:
-            logging.warning("未检测到任何有效的 API Key，AI 清洗步骤将被跳过。")
+            logging.warning("未检测到任何有效的 API Key，AI 步骤将被跳过。")
             return None
             
         for provider in self.providers:
@@ -502,20 +514,104 @@ class AIFallbackProcessor:
                 logging.error(f"❌ {name} 调用失败，准备降级。错误信息: {e}")
                 continue
                 
-        logging.error("所有 AI 提供商全军覆没！降级使用原文。")
+        logging.error("所有 AI 提供商全军覆没！")
         return None
 
-def refine_content_with_gemini(raw_items, visual_news_articles=None):
-    """调用 AI 对提取内容进行深加工：支持行业穿透、早晚报人格热切换、高审美排版"""
-    if not raw_items:
-        return ""
+class AgenticCurator:
+    """受 ui-ux-pro-max 和 internal-comms 启发的 AI 策展人"""
+    def __init__(self, processor):
+        self.processor = processor
+
+    def score_and_filter(self, items, top_n=8):
+        """对原始抓取项进行多维度评分并筛选"""
+        if not items: return []
         
+        logging.info(f"🔬 AI 策展人正在对 {len(items)} 条内容进行多维审计...")
+        
+        # 批量评分 Prompt (减少 API 调用次数)
+        items_text = ""
+        for i, item in enumerate(items):
+            items_text += f"ID:{i} | Title:{item['title']} | Desc:{item['desc'][:100]}\n"
+            
+        scoring_prompt = f"""
+        你是一位顶级 AI 行业主编，兼具先锋设计师 (ui-ux-pro-max) 与 商业分析师 (internal-comms) 的眼光。
+        请对以下内容进行评分，并返回一个 JSON 格式的列表。
+        
+        【评分标准 (0-10分)】:
+        1. 💎 搞钱潜力 (Commercial): 变现路径是否清晰？是否涉及大额融资？
+        2. ⚡ 技术硬核 (Tech): 是否是突破性架构？是否有 SOTA 表现？
+        3. 🎨 审美高度 (Aesthetic): 是否符合先锋审美？(Brutalism, Minimalism, Glassmorphism)?
+        4. 🌊 稀缺度 (Rarity): 是否是一手独家？
+        
+        要求：返回严谨的 JSON 数组，格式为: [{"id": 0, "score": 15.5, "reason": "..."}]
+        score = 以上四项加和。
+        
+        【待评分列表】:
+        {items_text}
+        """
+        
+        try:
+            res = self.processor.process(scoring_prompt)
+            # 简单清理可能的 Markdown 标记
+            json_str = res.strip().replace('```json', '').replace('```', '')
+            import json as json_lib
+            scores = json_lib.loads(json_str)
+            
+            # 映射评分回到原始 items
+            for s in scores:
+                idx = s.get('id')
+                if idx is not None and idx < len(items):
+                    items[idx]['ai_score'] = s.get('score', 0)
+                    items[idx]['ai_reason'] = s.get('reason', '')
+            
+            # 排序并取 Top N
+            items.sort(key=lambda x: x.get('ai_score', 0), reverse=True)
+            filtered = [it for it in items if it.get('ai_score', 0) > 12] # 过滤掉平庸内容
+            logging.info(f"✅ 审计完毕，筛选出 {len(filtered[:top_n])} 条高价值信号。")
+            return filtered[:top_n]
+        except Exception as e:
+            logging.error(f"AI 评分解析失败: {e}")
+            return items[:top_n] # 降级：返回前 N 条
+
+def refine_content_with_gemini(raw_items):
+    """最终合成：注入 internal-comms 的专业叙事风格"""
+    if not raw_items: return ""
+    
+    # 按照板块分类组织数据
+    formatted_items = ""
+    for item in raw_items:
+        score_tag = f" (💎AI评级: {item.get('ai_score', 'N/A')}/40)"
+        formatted_items += f"【{item['title']}】{score_tag}\n- 链接: {item['url']}\n- 深度点评: {item.get('ai_reason', '暂无')}\n\n"
+
+    prompt = f"""
+    你是 AI 趋势观察者 的主编。请基于以下筛选出的“高信噪比”信号，撰写一份极具质感的推送简报。
+    
+    【写作风格指南 (internal-comms)】:
+    - 语气：专业、克制、富有洞察力。
+    - 视角：以“我们” (Team / Agent) 的视角进行播报。
+    - 结构：
+        1. 🚀 [前沿雷达] - 覆盖技术突破与开源硬核。
+        2. 💰 [金钱永不眠] - 覆盖商业变现与投融资动态。
+        3. 🎨 [视觉实验室] - 覆盖顶级审美、先锋设计与多模态生成。
+        4. 🧘‍♂️ [AI 禅意时刻] - 一句总结今日价值。
+        
+    - 注意：使用 Emoji 增加呼吸感，但严禁使用 Markdown 链接格式。
+    
+    【今日高价值信号】:
+    {formatted_items}
+    """
+    
+    processor = AIFallbackProcessor()
+    refined_text = processor.process(prompt)
+    return refined_text if refined_text else "简报生成失败，请检查 AI 提供商。"
+      
     # 执行行业关键词加权与标星
     processed_text_list = []
     for item in raw_items:
         is_priority = any(kw.lower() in item['title'].lower() or kw.lower() in item['desc'].lower() for kw in FOCUS_KEYWORDS)
         prefix = "🌟【重点关注】" if is_priority else ""
-        processed_text_list.append(f"{prefix}标题: {item['title']}\n描述: {item['desc']}\n热度: {item['stars']}\n链接: {item['url']}")
+        pub_info = f"\n⏰ 发布时间: {item.get('pub_time', '实时')}"
+        processed_text_list.append(f"{prefix}标题: {item['title']}\n描述: {item['desc']}\n热度: {item['stars']}{pub_info}\n链接: {item['url']}")
         
     raw_text = "\n\n".join(processed_text_list)
     
@@ -556,8 +652,9 @@ def refine_content_with_gemini(raw_items, visual_news_articles=None):
     【通用排版审美要求 (Text 纯文字直给)】
     - 使用丰富的 Emoji 增加视觉层次感。不要使用 Markdown 语法（如 #, **, []() 等），因为有些客户端无法完美渲染。
     - 结构必须分大板块输出（不同类型的情报放在对应的板块下）。
-    - 单个项目的输出格式建议如下：
+    - 单个项目的输出格式必须包含发布时间，建议如下：
       💡 项目：项目标题 (🔥热度)
+      ⏰ 时间：原数据中的发布时间
       🔗 链接：http://...
       💬 简评：...
       ⭐ 评分：X/10
@@ -656,12 +753,22 @@ def send_wechat_raw_image(img_url):
     return False
 
 # ==========================================
-# 5. 主流程控制
+# 5. 主流程控制 (未来对话能力架构说明)
+# ==========================================
+# [Speculation: 对话能力架构调整建议]
+# 当前系统是单向推送模式（Cron-based Push）。
+# 若要增加对话功能，架构需做如下调整：
+# 1. 存储层：引入数据库（如 SQLite/Redis）存储 history.json 之外的消息上下文（Message Context），用于对话记忆。
+# 2. 交互层：需要搭建一个 Web API 服务（如 FastAPI），作为企业微信自建应用的 Callback URL。
+# 3. 路由层：解析用户消息 -> 提取意图（Query）-> 检索历史或实时搜索 -> AI 生成回复 -> 下发机器人 API。
+# 4. 异步层：对话响应需要异步处理，防止 Webhook 超时。
 # ==========================================
 def job():
     logging.info("🚀 开始执行自动化 Agent 任务...")
     
     history = load_history()
+    processor = AIFallbackProcessor()
+    curator = AgenticCurator(processor)
     
     # 采集多平台数据
     github_items = fetch_github_trending(history)
@@ -671,33 +778,36 @@ def job():
     lab_items = fetch_lab_updates(history)            
     commercial_items = fetch_ai_commercial_news(history) 
     visual_text_items, visual_news_articles = fetch_visual_inspiration(history)  
-    avant_garde_items = fetch_avant_garde_art(history) # 新增：全球顶级艺术源
+    avant_garde_items = fetch_avant_garde_art(history)
     
     # 汇总待发送文本的数据
-    all_raw_items = github_items + hn_items + hf_papers + aggregator_items + lab_items + commercial_items + visual_text_items
-    for g in avant_garde_items:
-        all_raw_items.append(g)
+    all_raw_items = github_items + hn_items + hf_papers + aggregator_items + lab_items + commercial_items + visual_text_items + avant_garde_items
 
-    if not all_raw_items and not visual_news_articles and not avant_garde_items:
+    if not all_raw_items:
         logging.info("各大平台风平浪静，无新增数据。")
         return
         
-    # 1. 发送文字主简报 (确保信息可达)
+    # --- Agentic Curating ---
+    # 利用 AI 策展人进行高标准的评分和筛选，确保推送的每一条都是精品
+    curated_items = curator.score_and_filter(all_raw_items, top_n=6)
+    
+    # 1. 发送文字主简报
     text_success = False
-    if all_raw_items:
-        refined_report = refine_content_with_gemini(all_raw_items)
+    if curated_items:
+        refined_report = refine_content_with_gemini(curated_items)
         text_success = send_wechat_notification(refined_report)
         
-    # 2. 视觉震撼：原生大图 1:1 直发（挑选最顶级的先锋艺术）
-    # 优先级：前卫艺术 > AI 视觉
+    # 2. 视觉震撼：原生大图 1:1 直发
     raw_images_to_send = []
-    for g in avant_garde_items: raw_images_to_send.append(g['picurl'])
-    for v in visual_news_articles:
-        if v.get('picurl'): raw_images_to_send.append(v['picurl'])
+    # 优先选高分的视觉内容
+    visual_pool = [it for it in all_raw_items if 'picurl' in it]
+    visual_pool.sort(key=lambda x: x.get('ai_score', 0), reverse=True)
+    
+    for v in visual_pool: raw_images_to_send.append(v['picurl'])
     
     img_count = 0
     for img_url in raw_images_to_send:
-        if img_count >= 3: break # 每天最多 3 张防止刷屏
+        if img_count >= 3: break 
         if send_wechat_raw_image(img_url):
             img_count += 1
             history.add(img_url) 
@@ -706,7 +816,8 @@ def job():
     if text_success or img_count > 0:
         save_history(history) 
     
-    logging.info(f"🏁 本轮任务执行完毕。推送了 {img_count} 张先锋视觉炸弹。")
+    logging.info(f"🏁 本轮任务执行完毕。经过 AI 策展筛选，推送了 {len(curated_items)} 条高价值资讯和 {img_count} 张视觉炸弹。")
+
 
 if __name__ == "__main__":
     job()

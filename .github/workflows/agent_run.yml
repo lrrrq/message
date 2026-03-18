@@ -25,11 +25,10 @@ jobs:
 
     - name: Run AI Agent
       env:
-        DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
-        WXPUSHER_APP_TOKEN: ${{ secrets.WXPUSHER_APP_TOKEN }}
-        WXPUSHER_UID: ${{ secrets.WXPUSHER_UID }}
+        DEEPSEEK_API_KEY: "${{ secrets.DEEPSEEK_API_KEY }}"
+        GROQ_API_KEY: "${{ secrets.GROQ_API_KEY }}"
+        GEMINI_API_KEY: "${{ secrets.GEMINI_API_KEY }}"
+        WECHAT_WEBHOOK_URL: "${{ secrets.WECHAT_WEBHOOK_URL }}"
       run: python agent.py
 
     - name: Commit and Push History (Persistent Storage)
