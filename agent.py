@@ -16,7 +16,10 @@ from openai import OpenAI
 load_dotenv()
 
 # 日志配置
-LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "app.log")
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
+LOG_FILE = os.path.join(LOG_DIR, "app.log")
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
