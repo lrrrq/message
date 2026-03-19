@@ -5,8 +5,8 @@ on:
     branches:
       - main
   schedule:
-    - cron: '15 1 * * *'  # 北京时间 09:15 (对冲 15min 延迟)
-    - cron: '15 11 * * *' # 北京时间 19:15 (对冲 15min 延迟)
+    - cron: '33 0 * * *'   # 北京时间 08:33 (错峰提前，深度对冲排队延迟)
+    - cron: '52 10 * * *'  # 北京时间 18:52 (错峰提前，深度对冲排队延迟)
   workflow_dispatch:
 
 permissions:

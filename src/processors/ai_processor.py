@@ -44,9 +44,16 @@ class AIFallbackProcessor:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.3
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        # 增加超时时间到 120s 应对 DeepSeek 的高负载延迟
+        response = requests.post(url, headers=headers, json=payload, timeout=120)
         response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
+        
+        # 增加对 JSON 的健壮性解析
+        res_json = response.json()
+        if 'choices' in res_json and len(res_json['choices']) > 0:
+            return res_json['choices'][0]['message']['content']
+        else:
+            raise ValueError(f"DeepSeek 返回了非预期内容: {response.text[:200]}")
         
     def _call_groq(self, prompt):
         import requests
@@ -60,7 +67,7 @@ class AIFallbackProcessor:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.3
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response = requests.post(url, headers=headers, json=payload, timeout=120)
         response.raise_for_status()
         return response.json()['choices'][0]['message']['content']
         
